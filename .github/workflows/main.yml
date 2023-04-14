@@ -1,9 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [sync]
   pull_request:
-    branches: [main]
+    branches: [sync]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -144,7 +144,7 @@ jobs:
         path: cli.rs
 
     - uses: marvinpinto/action-automatic-releases@latest
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      if: github.event_name == 'push' && github.ref == 'refs/heads/sync'
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         automatic_release_tag: latest

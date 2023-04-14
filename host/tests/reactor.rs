@@ -12,13 +12,14 @@ wasmtime::component::bindgen!({
     world: "test-reactor",
 });
 
-async fn instantiate(path: &str) -> Result<(Store<WasiCtx>, TestReactor)> {
+/*async*/
+fn instantiate(path: &str) -> Result<(Store<WasiCtx>, TestReactor)> {
     println!("{}", path);
 
     let mut config = Config::new();
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
     config.wasm_component_model(true);
-    config.async_support(true);
+    // config.async_support(true);
 
     let engine = Engine::new(&config)?;
     let component = Component::from_file(&engine, &path)?;
@@ -27,11 +28,13 @@ async fn instantiate(path: &str) -> Result<(Store<WasiCtx>, TestReactor)> {
 
     let mut store = Store::new(&engine, WasiCtxBuilder::new().build());
 
-    let (wasi, _instance) = TestReactor::instantiate_async(&mut store, &component, &linker).await?;
+    let (wasi, _instance) =
+        TestReactor::instantiate/*_async*/(&mut store, &component, &linker)/*.await*/?;
     Ok((store, wasi))
 }
 
-async fn run_reactor_tests(mut store: Store<WasiCtx>, reactor: TestReactor) -> Result<()> {
+/*async*/
+fn run_reactor_tests(mut store: Store<WasiCtx>, reactor: TestReactor) -> Result<()> {
     store
         .data_mut()
         .env
@@ -39,7 +42,7 @@ async fn run_reactor_tests(mut store: Store<WasiCtx>, reactor: TestReactor) -> R
 
     let r = reactor
         .call_add_strings(&mut store, &["hello", "$GOOD_DOG"])
-        .await?;
+        /*.await*/?;
     assert_eq!(r, 2);
 
     // Redefine the env, show that the adapter only fetches it once
@@ -52,10 +55,10 @@ async fn run_reactor_tests(mut store: Store<WasiCtx>, reactor: TestReactor) -> R
     // Cody is indeed good but this should be "hello again" "gussie"
     let r = reactor
         .call_add_strings(&mut store, &["hello again", "$GOOD_DOG"])
-        .await?;
+        /*.await*/?;
     assert_eq!(r, 4);
 
-    let contents = reactor.call_get_strings(&mut store).await?;
+    let contents = reactor.call_get_strings(&mut store)/*.await*/?;
     assert_eq!(contents, &["hello", "gussie", "hello again", "gussie"]);
     Ok(())
 }

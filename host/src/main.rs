@@ -23,8 +23,9 @@ struct Args {
     world: String,
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<()> {
+/*#[tokio::main(flavor = "current_thread")]
+async*/
+fn main() -> Result<()> {
     let args = Args::parse();
     let input = args.component;
 
@@ -38,15 +39,16 @@ async fn main() -> Result<()> {
     let mut linker = Linker::new(&engine);
 
     if args.world == "command" {
-        run_command(&mut linker, &engine, &component, &args.args).await?;
+        run_command(&mut linker, &engine, &component, &args.args)/*.await*/?;
     } else if args.world == "proxy" {
-        run_proxy(&mut linker, &engine, &component, &args.args).await?;
+        run_proxy(&mut linker, &engine, &component, &args.args)/*.await*/?;
     }
 
     Ok(())
 }
 
-async fn run_command(
+/*async*/
+fn run_command(
     linker: &mut Linker<WasiCtx>,
     engine: &Engine,
     component: &Component,
@@ -66,9 +68,10 @@ async fn run_command(
             .build(),
     );
 
-    let (wasi, _instance) = Command::instantiate_async(&mut store, component, linker).await?;
+    let (wasi, _instance) =
+        Command::instantiate/*_async*/(&mut store, component, linker)/*.await*/?;
 
-    let result: Result<(), ()> = wasi.call_main(&mut store).await?;
+    let result: Result<(), ()> = wasi.call_main(&mut store)/*.await*/?;
 
     if result.is_err() {
         anyhow::bail!("command returned with failing exit status");
@@ -77,7 +80,8 @@ async fn run_command(
     Ok(())
 }
 
-async fn run_proxy(
+/*async*/
+fn run_proxy(
     linker: &mut Linker<WasiCtx>,
     engine: &Engine,
     component: &Component,
@@ -93,7 +97,7 @@ async fn run_proxy(
         WasiCtxBuilder::new().inherit_stdio().args(&argv).build(),
     );
 
-    let (wasi, _instance) = Proxy::instantiate_async(&mut store, component, linker).await?;
+    let (wasi, _instance) = Proxy::instantiate/*_async*/(&mut store, component, linker)/*.await*/?;
 
     // TODO: do something
     let _ = wasi;

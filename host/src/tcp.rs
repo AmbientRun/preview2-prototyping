@@ -15,28 +15,30 @@ use crate::{
 };
 use cap_net_ext::AddressFamily;
 use cap_std::net::{Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, SocketAddrV4, SocketAddrV6};
+use pollster::FutureExt;
 use wasi_common::{network::TableNetworkExt, tcp_socket::TableTcpSocketExt, WasiTcpSocket};
 
-#[async_trait::async_trait]
 impl tcp::Host for WasiCtx {
-    async fn listen(&mut self, socket: TcpSocket, network: Network) -> HostResult<(), Error> {
+    /*async*/
+    fn listen(&mut self, socket: TcpSocket, network: Network) -> HostResult<(), Error> {
         let table = self.table_mut();
         let socket = table.get_tcp_socket(socket)?;
         let network = table.get_network(network)?;
 
-        socket.listen(network).await?;
+        socket.listen(network).block_on()?;
 
         Ok(Ok(()))
     }
 
-    async fn accept(
+    /*async*/
+    fn accept(
         &mut self,
         socket: TcpSocket,
     ) -> HostResult<(TcpSocket, InputStream, OutputStream), Error> {
         let table = self.table_mut();
         let socket = table.get_tcp_socket(socket)?;
 
-        let (connection, input_stream, output_stream, _addr) = socket.accept(false).await?;
+        let (connection, input_stream, output_stream, _addr) = socket.accept(false).block_on()?;
 
         let connection = table.push(Box::new(connection)).map_err(convert)?;
         let input_stream = table.push(Box::new(input_stream)).map_err(convert)?;
@@ -45,7 +47,8 @@ impl tcp::Host for WasiCtx {
         Ok(Ok((connection, input_stream, output_stream)))
     }
 
-    async fn connect(
+    /*async*/
+    fn connect(
         &mut self,
         socket: TcpSocket,
         network: Network,
@@ -55,7 +58,8 @@ impl tcp::Host for WasiCtx {
         let socket = table.get_tcp_socket(socket)?;
         let network = table.get_network(network)?;
 
-        let (input_stream, output_stream) = socket.connect(network, remote_address.into()).await?;
+        let (input_stream, output_stream) =
+            socket.connect(network, remote_address.into()).block_on()?;
 
         let input_stream = table.push(Box::new(input_stream)).map_err(convert)?;
         let output_stream = table.push(Box::new(output_stream)).map_err(convert)?;
@@ -63,31 +67,28 @@ impl tcp::Host for WasiCtx {
         Ok(Ok((input_stream, output_stream)))
     }
 
-    async fn receive_buffer_size(&mut self, socket: TcpSocket) -> HostResult<u64, Error> {
+    /*async*/
+    fn receive_buffer_size(&mut self, socket: TcpSocket) -> HostResult<u64, Error> {
         todo!()
     }
 
-    async fn set_receive_buffer_size(
-        &mut self,
-        socket: TcpSocket,
-        value: u64,
-    ) -> HostResult<(), Error> {
+    /*async*/
+    fn set_receive_buffer_size(&mut self, socket: TcpSocket, value: u64) -> HostResult<(), Error> {
         todo!()
     }
 
-    async fn send_buffer_size(&mut self, socket: TcpSocket) -> HostResult<u64, Error> {
+    /*async*/
+    fn send_buffer_size(&mut self, socket: TcpSocket) -> HostResult<u64, Error> {
         todo!()
     }
 
-    async fn set_send_buffer_size(
-        &mut self,
-        socket: TcpSocket,
-        value: u64,
-    ) -> HostResult<(), Error> {
+    /*async*/
+    fn set_send_buffer_size(&mut self, socket: TcpSocket, value: u64) -> HostResult<(), Error> {
         todo!()
     }
 
-    async fn bind(
+    /*async*/
+    fn bind(
         &mut self,
         this: TcpSocket,
         network: Network,
@@ -97,16 +98,13 @@ impl tcp::Host for WasiCtx {
         let socket = table.get_tcp_socket(this)?;
         let network = table.get_network(network)?;
 
-        socket.bind(network, local_address.into()).await?;
+        socket.bind(network, local_address.into()).block_on()?;
 
         Ok(Ok(()))
     }
 
-    async fn shutdown(
-        &mut self,
-        this: TcpSocket,
-        shutdown_type: ShutdownType,
-    ) -> HostResult<(), Error> {
+    /*async*/
+    fn shutdown(&mut self, this: TcpSocket, shutdown_type: ShutdownType) -> HostResult<(), Error> {
         let table = self.table_mut();
         let socket = table.get_tcp_socket(this)?;
 
@@ -116,12 +114,13 @@ impl tcp::Host for WasiCtx {
             ShutdownType::Both => Shutdown::Both,
         };
 
-        let addr = socket.shutdown(how).await?;
+        let addr = socket.shutdown(how).block_on()?;
 
         Ok(Ok(()))
     }
 
-    async fn local_address(&mut self, this: TcpSocket) -> HostResult<IpSocketAddress, Error> {
+    /*async*/
+    fn local_address(&mut self, this: TcpSocket) -> HostResult<IpSocketAddress, Error> {
         let table = self.table_mut();
         let socket = table.get_tcp_socket(this)?;
 
@@ -130,7 +129,8 @@ impl tcp::Host for WasiCtx {
         Ok(Ok(addr.into()))
     }
 
-    async fn remote_address(&mut self, this: TcpSocket) -> HostResult<IpSocketAddress, Error> {
+    /*async*/
+    fn remote_address(&mut self, this: TcpSocket) -> HostResult<IpSocketAddress, Error> {
         let table = self.table_mut();
         let socket = table.get_tcp_socket(this)?;
 
@@ -139,15 +139,18 @@ impl tcp::Host for WasiCtx {
         Ok(Ok(addr.into()))
     }
 
-    async fn keep_alive(&mut self, this: TcpSocket) -> HostResult<bool, Error> {
+    /*async*/
+    fn keep_alive(&mut self, this: TcpSocket) -> HostResult<bool, Error> {
         todo!()
     }
 
-    async fn set_keep_alive(&mut self, this: TcpSocket, value: bool) -> HostResult<(), Error> {
+    /*async*/
+    fn set_keep_alive(&mut self, this: TcpSocket, value: bool) -> HostResult<(), Error> {
         todo!()
     }
 
-    async fn no_delay(&mut self, this: TcpSocket) -> HostResult<bool, Error> {
+    /*async*/
+    fn no_delay(&mut self, this: TcpSocket) -> HostResult<bool, Error> {
         let table = self.table_mut();
         let socket = table.get_tcp_socket(this)?;
 
@@ -156,7 +159,8 @@ impl tcp::Host for WasiCtx {
         Ok(Ok(value))
     }
 
-    async fn set_no_delay(&mut self, this: TcpSocket, value: bool) -> HostResult<(), Error> {
+    /*async*/
+    fn set_no_delay(&mut self, this: TcpSocket, value: bool) -> HostResult<(), Error> {
         let table = self.table_mut();
         let socket = table.get_tcp_socket(this)?;
 
@@ -165,27 +169,28 @@ impl tcp::Host for WasiCtx {
         Ok(Ok(()))
     }
 
-    async fn address_family(&mut self, this: TcpSocket) -> HostResult<IpAddressFamily, Error> {
+    /*async*/
+    fn address_family(&mut self, this: TcpSocket) -> HostResult<IpAddressFamily, Error> {
         todo!()
     }
 
-    async fn unicast_hop_limit(&mut self, this: TcpSocket) -> HostResult<u8, Error> {
+    /*async*/
+    fn unicast_hop_limit(&mut self, this: TcpSocket) -> HostResult<u8, Error> {
         todo!()
     }
 
-    async fn set_unicast_hop_limit(&mut self, this: TcpSocket, value: u8) -> HostResult<(), Error> {
+    /*async*/
+    fn set_unicast_hop_limit(&mut self, this: TcpSocket, value: u8) -> HostResult<(), Error> {
         todo!()
     }
 
-    async fn set_listen_backlog_size(
-        &mut self,
-        this: TcpSocket,
-        value: u64,
-    ) -> HostResult<(), Error> {
+    /*async*/
+    fn set_listen_backlog_size(&mut self, this: TcpSocket, value: u64) -> HostResult<(), Error> {
         todo!()
     }
 
-    async fn ipv6_only(&mut self, this: TcpSocket) -> HostResult<bool, Error> {
+    /*async*/
+    fn ipv6_only(&mut self, this: TcpSocket) -> HostResult<bool, Error> {
         let table = self.table_mut();
         let socket = table.get_tcp_socket(this)?;
 
@@ -194,7 +199,8 @@ impl tcp::Host for WasiCtx {
         Ok(Ok(value))
     }
 
-    async fn set_ipv6_only(&mut self, this: TcpSocket, value: bool) -> HostResult<(), Error> {
+    /*async*/
+    fn set_ipv6_only(&mut self, this: TcpSocket, value: bool) -> HostResult<(), Error> {
         let table = self.table_mut();
         let socket = table.get_tcp_socket(this)?;
 
@@ -203,21 +209,25 @@ impl tcp::Host for WasiCtx {
         Ok(Ok(()))
     }
 
-    async fn non_blocking(&mut self, this: TcpSocket) -> HostResult<bool, Error> {
+    /*async*/
+    fn non_blocking(&mut self, this: TcpSocket) -> HostResult<bool, Error> {
         todo!()
     }
 
-    async fn set_non_blocking(&mut self, this: TcpSocket, value: bool) -> HostResult<(), Error> {
+    /*async*/
+    fn set_non_blocking(&mut self, this: TcpSocket, value: bool) -> HostResult<(), Error> {
         todo!()
     }
 
-    async fn subscribe(&mut self, this: TcpSocket) -> anyhow::Result<Pollable> {
+    /*async*/
+    fn subscribe(&mut self, this: TcpSocket) -> anyhow::Result<Pollable> {
         Ok(self
             .table_mut()
             .push(Box::new(PollableEntry::TcpSocket(this)))?)
     }
 
-    async fn drop_tcp_socket(&mut self, this: TcpSocket) -> anyhow::Result<()> {
+    /*async*/
+    fn drop_tcp_socket(&mut self, this: TcpSocket) -> anyhow::Result<()> {
         let table = self.table_mut();
         if !table.delete::<Box<dyn WasiTcpSocket>>(this).is_ok() {
             anyhow::bail!("{this} is not a socket");
@@ -226,9 +236,9 @@ impl tcp::Host for WasiCtx {
     }
 }
 
-#[async_trait::async_trait]
 impl tcp_create_socket::Host for WasiCtx {
-    async fn create_tcp_socket(
+    /*async*/
+    fn create_tcp_socket(
         &mut self,
         address_family: IpAddressFamily,
     ) -> HostResult<TcpSocket, Error> {

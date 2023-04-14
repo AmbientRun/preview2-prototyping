@@ -1,4 +1,5 @@
 use cap_rand::{distributions::Standard, Rng};
+use pollster::FutureExt;
 
 use crate::{command, proxy, WasiCtx};
 
@@ -22,32 +23,36 @@ async fn insecure_random(_ctx: &mut WasiCtx) -> anyhow::Result<(u64, u64)> {
 // be shared between the two. Ideally, we should add features to the
 // bindings to facilitate this kind of sharing.
 
-#[async_trait::async_trait]
 impl command::wasi::random::Host for WasiCtx {
-    async fn get_random_bytes(&mut self, len: u64) -> anyhow::Result<Vec<u8>> {
-        get_random_bytes(self, len).await
+    /*async*/
+    fn get_random_bytes(&mut self, len: u64) -> anyhow::Result<Vec<u8>> {
+        get_random_bytes(self, len).block_on()
     }
 
-    async fn get_random_u64(&mut self) -> anyhow::Result<u64> {
-        get_random_u64(self).await
+    /*async*/
+    fn get_random_u64(&mut self) -> anyhow::Result<u64> {
+        get_random_u64(self).block_on()
     }
 
-    async fn insecure_random(&mut self) -> anyhow::Result<(u64, u64)> {
-        insecure_random(self).await
+    /*async*/
+    fn insecure_random(&mut self) -> anyhow::Result<(u64, u64)> {
+        insecure_random(self).block_on()
     }
 }
 
-#[async_trait::async_trait]
 impl proxy::wasi::random::Host for WasiCtx {
-    async fn get_random_bytes(&mut self, len: u64) -> anyhow::Result<Vec<u8>> {
-        get_random_bytes(self, len).await
+    /*async*/
+    fn get_random_bytes(&mut self, len: u64) -> anyhow::Result<Vec<u8>> {
+        get_random_bytes(self, len).block_on()
     }
 
-    async fn get_random_u64(&mut self) -> anyhow::Result<u64> {
-        get_random_u64(self).await
+    /*async*/
+    fn get_random_u64(&mut self) -> anyhow::Result<u64> {
+        get_random_u64(self).block_on()
     }
 
-    async fn insecure_random(&mut self) -> anyhow::Result<(u64, u64)> {
-        insecure_random(self).await
+    /*async*/
+    fn insecure_random(&mut self) -> anyhow::Result<(u64, u64)> {
+        insecure_random(self).block_on()
     }
 }

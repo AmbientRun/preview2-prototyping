@@ -7,9 +7,9 @@ use crate::{
     HostResult, WasiCtx,
 };
 
-#[async_trait::async_trait]
 impl ip_name_lookup::Host for WasiCtx {
-    async fn resolve_addresses(
+    /*async*/
+    fn resolve_addresses(
         &mut self,
         network: Network,
         name: String,
@@ -19,25 +19,26 @@ impl ip_name_lookup::Host for WasiCtx {
         todo!()
     }
 
-    async fn resolve_next_address(
+    /*async*/
+    fn resolve_next_address(
         &mut self,
         stream: ResolveAddressStream,
     ) -> HostResult<Option<IpAddress>, Error> {
         todo!()
     }
 
-    async fn drop_resolve_address_stream(
-        &mut self,
-        stream: ResolveAddressStream,
-    ) -> anyhow::Result<()> {
+    /*async*/
+    fn drop_resolve_address_stream(&mut self, stream: ResolveAddressStream) -> anyhow::Result<()> {
         todo!()
     }
 
-    async fn non_blocking(&mut self, stream: ResolveAddressStream) -> HostResult<bool, Error> {
+    /*async*/
+    fn non_blocking(&mut self, stream: ResolveAddressStream) -> HostResult<bool, Error> {
         todo!()
     }
 
-    async fn set_non_blocking(
+    /*async*/
+    fn set_non_blocking(
         &mut self,
         stream: ResolveAddressStream,
         value: bool,
@@ -45,7 +46,8 @@ impl ip_name_lookup::Host for WasiCtx {
         todo!()
     }
 
-    async fn subscribe(&mut self, stream: ResolveAddressStream) -> anyhow::Result<Pollable> {
+    /*async*/
+    fn subscribe(&mut self, stream: ResolveAddressStream) -> anyhow::Result<Pollable> {
         todo!()
     }
 }

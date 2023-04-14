@@ -10,7 +10,6 @@ test_programs_macros::reactor_tests!();
 wasmtime::component::bindgen!({
     path: "../test-programs/reactor-tests/wit",
     world: "test-reactor",
-    async: true,
 });
 
 async fn instantiate(path: &str) -> Result<(Store<WasiCtx>, TestReactor)> {

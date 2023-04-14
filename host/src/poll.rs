@@ -6,6 +6,7 @@ use crate::{
     command::wasi::tcp::TcpSocket,
     proxy, WasiCtx,
 };
+use pollster::FutureExt;
 use wasi_common::stream::TableStreamExt;
 use wasi_common::tcp_socket::TableTcpSocketExt;
 
@@ -69,7 +70,7 @@ async fn poll_oneoff(ctx: &mut WasiCtx, futures: Vec<Pollable>) -> anyhow::Resul
     }
 
     // Do the poll.
-    ctx.sched.poll_oneoff(&mut poll).await?;
+    ctx.sched.poll_oneoff(&mut poll).block_on()?;
 
     // Convert the results into a list of `u8` to return.
     let mut results = vec![0_u8; len];
@@ -84,24 +85,26 @@ async fn poll_oneoff(ctx: &mut WasiCtx, futures: Vec<Pollable>) -> anyhow::Resul
 // be shared between the two. Ideally, we should add features to the
 // bindings to facilitate this kind of sharing.
 
-#[async_trait::async_trait]
 impl command::wasi::poll::Host for WasiCtx {
-    async fn drop_pollable(&mut self, pollable: Pollable) -> anyhow::Result<()> {
-        drop_pollable(self, pollable).await
+    /*async*/
+    fn drop_pollable(&mut self, pollable: Pollable) -> anyhow::Result<()> {
+        drop_pollable(self, pollable).block_on()
     }
 
-    async fn poll_oneoff(&mut self, futures: Vec<Pollable>) -> anyhow::Result<Vec<u8>> {
-        poll_oneoff(self, futures).await
+    /*async*/
+    fn poll_oneoff(&mut self, futures: Vec<Pollable>) -> anyhow::Result<Vec<u8>> {
+        poll_oneoff(self, futures).block_on()
     }
 }
 
-#[async_trait::async_trait]
 impl proxy::wasi::poll::Host for WasiCtx {
-    async fn drop_pollable(&mut self, pollable: Pollable) -> anyhow::Result<()> {
-        drop_pollable(self, pollable).await
+    /*async*/
+    fn drop_pollable(&mut self, pollable: Pollable) -> anyhow::Result<()> {
+        drop_pollable(self, pollable).block_on()
     }
 
-    async fn poll_oneoff(&mut self, futures: Vec<Pollable>) -> anyhow::Result<Vec<u8>> {
-        poll_oneoff(self, futures).await
+    /*async*/
+    fn poll_oneoff(&mut self, futures: Vec<Pollable>) -> anyhow::Result<Vec<u8>> {
+        poll_oneoff(self, futures).block_on()
     }
 }

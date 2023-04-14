@@ -1,9 +1,9 @@
 use crate::proxy::wasi::console;
 use crate::WasiCtx;
 
-#[async_trait::async_trait]
 impl console::Host for WasiCtx {
-    async fn log(
+    /*async*/
+    fn log(
         &mut self,
         level: console::Level,
         context: String,

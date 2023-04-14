@@ -10,9 +10,9 @@ pub(crate) fn convert(_error: wasi_common::Error) -> anyhow::Error {
     todo!("convert wasi-common Error to wasi_network::Error")
 }
 
-#[async_trait::async_trait]
 impl network::Host for WasiCtx {
-    async fn drop_network(&mut self, this: Network) -> anyhow::Result<()> {
+    /*async*/
+    fn drop_network(&mut self, this: Network) -> anyhow::Result<()> {
         let table = self.table_mut();
         if !table.delete::<Box<dyn WasiNetwork>>(this).is_ok() {
             anyhow::bail!("{this} is not a network");
@@ -21,9 +21,9 @@ impl network::Host for WasiCtx {
     }
 }
 
-#[async_trait::async_trait]
 impl instance_network::Host for WasiCtx {
-    async fn instance_network(&mut self) -> anyhow::Result<Network> {
+    /*async*/
+    fn instance_network(&mut self) -> anyhow::Result<Network> {
         let network = (self.network_creator)(self.pool.clone())?;
         let table = self.table_mut();
         let network = table.push(Box::new(network)).map_err(convert)?;

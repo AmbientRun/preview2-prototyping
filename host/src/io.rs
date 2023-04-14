@@ -6,6 +6,7 @@ use crate::{
     proxy, WasiCtx,
 };
 use anyhow::anyhow;
+use pollster::FutureExt;
 use wasi_common::stream::TableStreamExt;
 
 impl From<wasi_common::Error> for streams::Error {
@@ -226,224 +227,240 @@ async fn subscribe_to_output_stream(
 // be shared between the two. Ideally, we should add features to the
 // bindings to facilitate this kind of sharing.
 
-#[async_trait::async_trait]
 impl command::wasi::streams::Host for WasiCtx {
-    async fn drop_input_stream(&mut self, stream: InputStream) -> anyhow::Result<()> {
-        drop_input_stream(self, stream).await
+    /*async*/
+    fn drop_input_stream(&mut self, stream: InputStream) -> anyhow::Result<()> {
+        drop_input_stream(self, stream).block_on()
     }
 
-    async fn drop_output_stream(&mut self, stream: OutputStream) -> anyhow::Result<()> {
-        drop_output_stream(self, stream).await
+    /*async*/
+    fn drop_output_stream(&mut self, stream: OutputStream) -> anyhow::Result<()> {
+        drop_output_stream(self, stream).block_on()
     }
 
-    async fn read(
+    /*async*/
+    fn read(&mut self, stream: InputStream, len: u64) -> Result<(Vec<u8>, bool), streams::Error> {
+        read(self, stream, len).block_on()
+    }
+
+    /*async*/
+    fn blocking_read(
         &mut self,
         stream: InputStream,
         len: u64,
     ) -> Result<(Vec<u8>, bool), streams::Error> {
-        read(self, stream, len).await
+        blocking_read(self, stream, len).block_on()
     }
 
-    async fn blocking_read(
-        &mut self,
-        stream: InputStream,
-        len: u64,
-    ) -> Result<(Vec<u8>, bool), streams::Error> {
-        blocking_read(self, stream, len).await
+    /*async*/
+    fn write(&mut self, stream: OutputStream, bytes: Vec<u8>) -> Result<u64, streams::Error> {
+        write(self, stream, bytes).block_on()
     }
 
-    async fn write(&mut self, stream: OutputStream, bytes: Vec<u8>) -> Result<u64, streams::Error> {
-        write(self, stream, bytes).await
-    }
-
-    async fn blocking_write(
+    /*async*/
+    fn blocking_write(
         &mut self,
         stream: OutputStream,
         bytes: Vec<u8>,
     ) -> Result<u64, streams::Error> {
-        blocking_write(self, stream, bytes).await
+        blocking_write(self, stream, bytes).block_on()
     }
 
-    async fn skip(&mut self, stream: InputStream, len: u64) -> Result<(u64, bool), streams::Error> {
-        skip(self, stream, len).await
+    /*async*/
+    fn skip(&mut self, stream: InputStream, len: u64) -> Result<(u64, bool), streams::Error> {
+        skip(self, stream, len).block_on()
     }
 
-    async fn blocking_skip(
+    /*async*/
+    fn blocking_skip(
         &mut self,
         stream: InputStream,
         len: u64,
     ) -> Result<(u64, bool), streams::Error> {
-        blocking_skip(self, stream, len).await
+        blocking_skip(self, stream, len).block_on()
     }
 
-    async fn write_zeroes(
+    /*async*/
+    fn write_zeroes(&mut self, stream: OutputStream, len: u64) -> Result<u64, streams::Error> {
+        write_zeroes(self, stream, len).block_on()
+    }
+
+    /*async*/
+    fn blocking_write_zeroes(
         &mut self,
         stream: OutputStream,
         len: u64,
     ) -> Result<u64, streams::Error> {
-        write_zeroes(self, stream, len).await
+        blocking_write_zeroes(self, stream, len).block_on()
     }
 
-    async fn blocking_write_zeroes(
-        &mut self,
-        stream: OutputStream,
-        len: u64,
-    ) -> Result<u64, streams::Error> {
-        blocking_write_zeroes(self, stream, len).await
-    }
-
-    async fn splice(
+    /*async*/
+    fn splice(
         &mut self,
         src: InputStream,
         dst: OutputStream,
         len: u64,
     ) -> Result<(u64, bool), streams::Error> {
-        splice(self, src, dst, len).await
+        splice(self, src, dst, len).block_on()
     }
 
-    async fn blocking_splice(
+    /*async*/
+    fn blocking_splice(
         &mut self,
         src: InputStream,
         dst: OutputStream,
         len: u64,
     ) -> Result<(u64, bool), streams::Error> {
-        blocking_splice(self, src, dst, len).await
+        blocking_splice(self, src, dst, len).block_on()
     }
 
-    async fn forward(
-        &mut self,
-        src: InputStream,
-        dst: OutputStream,
-    ) -> Result<u64, streams::Error> {
-        forward(self, src, dst).await
+    /*async*/
+    fn forward(&mut self, src: InputStream, dst: OutputStream) -> Result<u64, streams::Error> {
+        forward(self, src, dst).block_on()
     }
 
-    async fn subscribe_to_input_stream(&mut self, stream: InputStream) -> anyhow::Result<Pollable> {
-        subscribe_to_input_stream(self, stream).await
+    /*async*/
+    fn subscribe_to_input_stream(&mut self, stream: InputStream) -> anyhow::Result<Pollable> {
+        subscribe_to_input_stream(self, stream).block_on()
     }
 
-    async fn subscribe_to_output_stream(
-        &mut self,
-        stream: OutputStream,
-    ) -> anyhow::Result<Pollable> {
-        subscribe_to_output_stream(self, stream).await
+    /*async*/
+    fn subscribe_to_output_stream(&mut self, stream: OutputStream) -> anyhow::Result<Pollable> {
+        subscribe_to_output_stream(self, stream).block_on()
     }
 }
 
-#[async_trait::async_trait]
 impl proxy::wasi::streams::Host for WasiCtx {
-    async fn drop_input_stream(&mut self, stream: InputStream) -> anyhow::Result<()> {
-        drop_input_stream(self, stream).await
+    /*async*/
+    fn drop_input_stream(&mut self, stream: InputStream) -> anyhow::Result<()> {
+        drop_input_stream(self, stream).block_on()
     }
 
-    async fn drop_output_stream(&mut self, stream: OutputStream) -> anyhow::Result<()> {
-        drop_output_stream(self, stream).await
+    /*async*/
+    fn drop_output_stream(&mut self, stream: OutputStream) -> anyhow::Result<()> {
+        drop_output_stream(self, stream).block_on()
     }
 
-    async fn read(
+    /*async*/
+    fn read(
         &mut self,
         stream: InputStream,
         len: u64,
     ) -> Result<(Vec<u8>, bool), proxy::wasi::streams::Error> {
-        read(self, stream, len).await.map_err(|e| e.into())
+        read(self, stream, len).block_on().map_err(|e| e.into())
     }
 
-    async fn blocking_read(
+    /*async*/
+    fn blocking_read(
         &mut self,
         stream: InputStream,
         len: u64,
     ) -> Result<(Vec<u8>, bool), proxy::wasi::streams::Error> {
-        blocking_read(self, stream, len).await.map_err(|e| e.into())
+        blocking_read(self, stream, len)
+            .block_on()
+            .map_err(|e| e.into())
     }
 
-    async fn write(
+    /*async*/
+    fn write(
         &mut self,
         stream: OutputStream,
         bytes: Vec<u8>,
     ) -> Result<u64, proxy::wasi::streams::Error> {
-        write(self, stream, bytes).await.map_err(|e| e.into())
+        write(self, stream, bytes).block_on().map_err(|e| e.into())
     }
 
-    async fn blocking_write(
+    /*async*/
+    fn blocking_write(
         &mut self,
         stream: OutputStream,
         bytes: Vec<u8>,
     ) -> Result<u64, proxy::wasi::streams::Error> {
         blocking_write(self, stream, bytes)
-            .await
+            .block_on()
             .map_err(|e| e.into())
     }
 
-    async fn skip(
+    /*async*/
+    fn skip(
         &mut self,
         stream: InputStream,
         len: u64,
     ) -> Result<(u64, bool), proxy::wasi::streams::Error> {
-        skip(self, stream, len).await.map_err(|e| e.into())
+        skip(self, stream, len).block_on().map_err(|e| e.into())
     }
 
-    async fn blocking_skip(
+    /*async*/
+    fn blocking_skip(
         &mut self,
         stream: InputStream,
         len: u64,
     ) -> Result<(u64, bool), proxy::wasi::streams::Error> {
-        blocking_skip(self, stream, len).await.map_err(|e| e.into())
+        blocking_skip(self, stream, len)
+            .block_on()
+            .map_err(|e| e.into())
     }
 
-    async fn write_zeroes(
+    /*async*/
+    fn write_zeroes(
         &mut self,
         stream: OutputStream,
         len: u64,
     ) -> Result<u64, proxy::wasi::streams::Error> {
-        write_zeroes(self, stream, len).await.map_err(|e| e.into())
+        write_zeroes(self, stream, len)
+            .block_on()
+            .map_err(|e| e.into())
     }
 
-    async fn blocking_write_zeroes(
+    /*async*/
+    fn blocking_write_zeroes(
         &mut self,
         stream: OutputStream,
         len: u64,
     ) -> Result<u64, proxy::wasi::streams::Error> {
         blocking_write_zeroes(self, stream, len)
-            .await
+            .block_on()
             .map_err(|e| e.into())
     }
 
-    async fn splice(
+    /*async*/
+    fn splice(
         &mut self,
         src: InputStream,
         dst: OutputStream,
         len: u64,
     ) -> Result<(u64, bool), proxy::wasi::streams::Error> {
-        splice(self, src, dst, len).await.map_err(|e| e.into())
+        splice(self, src, dst, len).block_on().map_err(|e| e.into())
     }
 
-    async fn blocking_splice(
+    /*async*/
+    fn blocking_splice(
         &mut self,
         src: InputStream,
         dst: OutputStream,
         len: u64,
     ) -> Result<(u64, bool), proxy::wasi::streams::Error> {
         blocking_splice(self, src, dst, len)
-            .await
+            .block_on()
             .map_err(|e| e.into())
     }
 
-    async fn forward(
+    /*async*/
+    fn forward(
         &mut self,
         src: InputStream,
         dst: OutputStream,
     ) -> Result<u64, proxy::wasi::streams::Error> {
-        forward(self, src, dst).await.map_err(|e| e.into())
+        forward(self, src, dst).block_on().map_err(|e| e.into())
     }
 
-    async fn subscribe_to_input_stream(&mut self, stream: InputStream) -> anyhow::Result<Pollable> {
-        subscribe_to_input_stream(self, stream).await
+    /*async*/
+    fn subscribe_to_input_stream(&mut self, stream: InputStream) -> anyhow::Result<Pollable> {
+        subscribe_to_input_stream(self, stream).block_on()
     }
 
-    async fn subscribe_to_output_stream(
-        &mut self,
-        stream: OutputStream,
-    ) -> anyhow::Result<Pollable> {
-        subscribe_to_output_stream(self, stream).await
+    /*async*/
+    fn subscribe_to_output_stream(&mut self, stream: OutputStream) -> anyhow::Result<Pollable> {
+        subscribe_to_output_stream(self, stream).block_on()
     }
 }

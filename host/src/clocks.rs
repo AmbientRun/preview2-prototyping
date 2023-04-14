@@ -24,9 +24,9 @@ impl TryFrom<SystemTime> for Datetime {
     }
 }
 
-#[async_trait::async_trait]
 impl wall_clock::Host for WasiCtx {
-    async fn now(&mut self) -> anyhow::Result<Datetime> {
+    /*async*/
+    fn now(&mut self) -> anyhow::Result<Datetime> {
         let now = self.clocks.wall.now();
         Ok(Datetime {
             seconds: now.as_secs(),
@@ -34,7 +34,8 @@ impl wall_clock::Host for WasiCtx {
         })
     }
 
-    async fn resolution(&mut self) -> anyhow::Result<Datetime> {
+    /*async*/
+    fn resolution(&mut self) -> anyhow::Result<Datetime> {
         let res = self.clocks.wall.resolution();
         Ok(Datetime {
             seconds: res.as_secs(),
@@ -43,38 +44,38 @@ impl wall_clock::Host for WasiCtx {
     }
 }
 
-#[async_trait::async_trait]
 impl monotonic_clock::Host for WasiCtx {
-    async fn now(&mut self) -> anyhow::Result<Instant> {
+    /*async*/
+    fn now(&mut self) -> anyhow::Result<Instant> {
         Ok(self.clocks.monotonic.now())
     }
 
-    async fn resolution(&mut self) -> anyhow::Result<Instant> {
+    /*async*/
+    fn resolution(&mut self) -> anyhow::Result<Instant> {
         Ok(self.clocks.monotonic.resolution())
     }
 
-    async fn subscribe(&mut self, when: Instant, absolute: bool) -> anyhow::Result<Pollable> {
+    /*async*/
+    fn subscribe(&mut self, when: Instant, absolute: bool) -> anyhow::Result<Pollable> {
         Ok(self
             .table_mut()
             .push(Box::new(PollableEntry::MonotonicClock(when, absolute)))?)
     }
 }
 
-#[async_trait::async_trait]
 impl timezone::Host for WasiCtx {
-    async fn display(
-        &mut self,
-        timezone: Timezone,
-        when: Datetime,
-    ) -> anyhow::Result<TimezoneDisplay> {
+    /*async*/
+    fn display(&mut self, timezone: Timezone, when: Datetime) -> anyhow::Result<TimezoneDisplay> {
         todo!()
     }
 
-    async fn utc_offset(&mut self, timezone: Timezone, when: Datetime) -> anyhow::Result<i32> {
+    /*async*/
+    fn utc_offset(&mut self, timezone: Timezone, when: Datetime) -> anyhow::Result<i32> {
         todo!()
     }
 
-    async fn drop_timezone(&mut self, timezone: Timezone) -> anyhow::Result<()> {
+    /*async*/
+    fn drop_timezone(&mut self, timezone: Timezone) -> anyhow::Result<()> {
         todo!()
     }
 }

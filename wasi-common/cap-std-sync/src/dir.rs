@@ -66,12 +66,21 @@ impl Dir {
 
         use cap_fs_ext::OpenOptionsSyncExt;
         if fdflags.contains(wasi_common::file::FdFlags::DSYNC) {
+            if cfg!(windows) {
+                return Err(Error::not_supported());
+            }
             opts.dsync(true);
         }
         if fdflags.contains(wasi_common::file::FdFlags::SYNC) {
+            if cfg!(windows) {
+                return Err(Error::not_supported());
+            }
             opts.sync(true);
         }
         if fdflags.contains(wasi_common::file::FdFlags::RSYNC) {
+            if cfg!(windows) {
+                return Err(Error::not_supported());
+            }
             opts.rsync(true);
         }
         if fdflags.contains(wasi_common::file::FdFlags::NONBLOCK) {
@@ -376,7 +385,7 @@ mod test {
     fn readdir() {
         use std::collections::HashMap;
         use wasi_common::dir::{ReaddirCursor, ReaddirEntity, WasiDir};
-        use wasi_common::file::{FdFlags, OFlags};
+        use wasi_common::file::{FdFlags, FileType, OFlags};
 
         fn readdir_into_map(dir: &dyn WasiDir) -> HashMap<String, ReaddirEntity> {
             let mut out = HashMap::new();

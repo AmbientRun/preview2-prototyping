@@ -1,4 +1,4 @@
-use crate::proxy::wasi::console;
+use crate::wasi::console;
 use crate::WasiCtx;
 
 impl console::Host for WasiCtx {

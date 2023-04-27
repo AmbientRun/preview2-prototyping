@@ -1,4 +1,4 @@
-use crate::command::wasi;
+use crate::wasi;
 use crate::WasiCtx;
 
 impl wasi::environment::Host for WasiCtx {

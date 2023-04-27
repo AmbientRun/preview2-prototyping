@@ -1,4 +1,4 @@
-use crate::command::wasi::exit;
+use crate::wasi::exit;
 use crate::WasiCtx;
 
 impl exit::Host for WasiCtx {

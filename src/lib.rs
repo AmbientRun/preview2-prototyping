@@ -405,7 +405,13 @@ pub unsafe extern "C" fn fd_advise(
 /// Note: This is similar to `posix_fallocate` in POSIX.
 #[no_mangle]
 pub unsafe extern "C" fn fd_allocate(fd: Fd, offset: Filesize, len: Filesize) -> Errno {
-    unreachable!("fd_allocate")
+    State::with(|state| {
+        let ds = state.descriptors();
+        // For not-files, fail with BADF
+        let file = ds.get_file(fd)?;
+        // For all files, fail with NOTSUP, because this call does not exist in preview 2.
+        Err(wasi::ERRNO_NOTSUP)
+    })
 }
 
 /// Close a file descriptor.
@@ -462,9 +468,6 @@ pub unsafe extern "C" fn fd_fdstat_get(fd: Fd, stat: *mut Fdstat) -> Errno {
             if flags.contains(filesystem::DescriptorFlags::DATA_INTEGRITY_SYNC) {
                 fs_flags |= FDFLAGS_DSYNC;
             }
-            if flags.contains(filesystem::DescriptorFlags::NON_BLOCKING) {
-                fs_flags |= FDFLAGS_NONBLOCK;
-            }
             if flags.contains(filesystem::DescriptorFlags::REQUESTED_WRITE_SYNC) {
                 fs_flags |= FDFLAGS_RSYNC;
             }
@@ -473,6 +476,9 @@ pub unsafe extern "C" fn fd_fdstat_get(fd: Fd, stat: *mut Fdstat) -> Errno {
             }
             if file.append {
                 fs_flags |= FDFLAGS_APPEND;
+            }
+            if !file.blocking {
+                fs_flags |= FDFLAGS_NONBLOCK;
             }
             let fs_rights_inheriting = fs_rights_base;
 
@@ -520,24 +526,22 @@ pub unsafe extern "C" fn fd_fdstat_get(fd: Fd, stat: *mut Fdstat) -> Errno {
 /// Note: This is similar to `fcntl(fd, F_SETFL, flags)` in POSIX.
 #[no_mangle]
 pub unsafe extern "C" fn fd_fdstat_set_flags(fd: Fd, flags: Fdflags) -> Errno {
-    let mut new_flags = filesystem::DescriptorFlags::empty();
-    if flags & FDFLAGS_DSYNC == FDFLAGS_DSYNC {
-        new_flags |= filesystem::DescriptorFlags::DATA_INTEGRITY_SYNC;
-    }
-    if flags & FDFLAGS_NONBLOCK == FDFLAGS_NONBLOCK {
-        new_flags |= filesystem::DescriptorFlags::NON_BLOCKING;
-    }
-    if flags & FDFLAGS_RSYNC == FDFLAGS_RSYNC {
-        new_flags |= filesystem::DescriptorFlags::REQUESTED_WRITE_SYNC;
-    }
-    if flags & FDFLAGS_SYNC == FDFLAGS_SYNC {
-        new_flags |= filesystem::DescriptorFlags::FILE_INTEGRITY_SYNC;
+    // Only support changing the NONBLOCK or APPEND flags.
+    if flags & !(FDFLAGS_NONBLOCK | FDFLAGS_APPEND) != 0 {
+        return wasi::ERRNO_INVAL;
     }
 
-    State::with(|state| {
-        let ds = state.descriptors();
-        let file = ds.get_file(fd)?;
-        filesystem::set_flags(file.fd, new_flags)?;
+    State::with_mut(|state| {
+        let mut ds = state.descriptors_mut();
+        let file = match ds.get_mut(fd)? {
+            Descriptor::Streams(Streams {
+                type_: StreamType::File(file),
+                ..
+            }) if !file.is_dir() => file,
+            _ => Err(wasi::ERRNO_BADF)?,
+        };
+        file.append = (flags & FDFLAGS_APPEND == FDFLAGS_APPEND);
+        file.blocking = !(flags & FDFLAGS_NONBLOCK == FDFLAGS_NONBLOCK);
         Ok(())
     })
 }
@@ -558,7 +562,6 @@ pub unsafe extern "C" fn fd_fdstat_set_rights(
 pub unsafe extern "C" fn fd_filestat_get(fd: Fd, buf: *mut Filestat) -> Errno {
     State::with(|state| {
         let ds = state.descriptors();
-
         match ds.get(fd)? {
             Descriptor::Streams(Streams {
                 type_: StreamType::File(file),
@@ -613,6 +616,21 @@ pub unsafe extern "C" fn fd_filestat_set_size(fd: Fd, size: Filesize) -> Errno {
     })
 }
 
+fn systimespec(set: bool, ts: Timestamp, now: bool) -> Result<filesystem::NewTimestamp, Errno> {
+    if set && now {
+        Err(wasi::ERRNO_INVAL)
+    } else if set {
+        Ok(filesystem::NewTimestamp::Timestamp(filesystem::Datetime {
+            seconds: ts / 1_000_000_000,
+            nanoseconds: (ts % 1_000_000_000) as _,
+        }))
+    } else if now {
+        Ok(filesystem::NewTimestamp::Now)
+    } else {
+        Ok(filesystem::NewTimestamp::NoChange)
+    }
+}
+
 /// Adjust the timestamps of an open file or directory.
 /// Note: This is similar to `futimens` in POSIX.
 #[no_mangle]
@@ -622,30 +640,17 @@ pub unsafe extern "C" fn fd_filestat_set_times(
     mtim: Timestamp,
     fst_flags: Fstflags,
 ) -> Errno {
-    let atim =
-        if fst_flags & (FSTFLAGS_ATIM | FSTFLAGS_ATIM_NOW) == (FSTFLAGS_ATIM | FSTFLAGS_ATIM_NOW) {
-            filesystem::NewTimestamp::Now
-        } else if fst_flags & FSTFLAGS_ATIM == FSTFLAGS_ATIM {
-            filesystem::NewTimestamp::Timestamp(filesystem::Datetime {
-                seconds: atim / 1_000_000_000,
-                nanoseconds: (atim % 1_000_000_000) as _,
-            })
-        } else {
-            filesystem::NewTimestamp::NoChange
-        };
-    let mtim =
-        if fst_flags & (FSTFLAGS_MTIM | FSTFLAGS_MTIM_NOW) == (FSTFLAGS_MTIM | FSTFLAGS_MTIM_NOW) {
-            filesystem::NewTimestamp::Now
-        } else if fst_flags & FSTFLAGS_MTIM == FSTFLAGS_MTIM {
-            filesystem::NewTimestamp::Timestamp(filesystem::Datetime {
-                seconds: mtim / 1_000_000_000,
-                nanoseconds: (mtim % 1_000_000_000) as _,
-            })
-        } else {
-            filesystem::NewTimestamp::NoChange
-        };
-
     State::with(|state| {
+        let atim = systimespec(
+            fst_flags & FSTFLAGS_ATIM == FSTFLAGS_ATIM,
+            atim,
+            fst_flags & FSTFLAGS_ATIM_NOW == FSTFLAGS_ATIM_NOW,
+        )?;
+        let mtim = systimespec(
+            fst_flags & FSTFLAGS_MTIM == FSTFLAGS_MTIM,
+            mtim,
+            fst_flags & FSTFLAGS_MTIM_NOW == FSTFLAGS_MTIM_NOW,
+        )?;
         let ds = state.descriptors();
         let file = ds.get_file(fd)?;
         filesystem::set_times(file.fd, atim, mtim)?;
@@ -798,13 +803,23 @@ pub unsafe extern "C" fn fd_read(
     State::with(|state| {
         match state.descriptors().get(fd)? {
             Descriptor::Streams(streams) => {
-                let wasi_stream = streams.get_read_stream()?;
+                let blocking = if let StreamType::File(file) = &streams.type_ {
+                    file.blocking
+                } else {
+                    false
+                };
 
                 let read_len = u64::try_from(len).trapping_unwrap();
                 let wasi_stream = streams.get_read_stream()?;
                 let (data, end) = state
                     .import_alloc
-                    .with_buffer(ptr, len, || streams::read(wasi_stream, read_len))
+                    .with_buffer(ptr, len, || {
+                        if blocking {
+                            streams::blocking_read(wasi_stream, read_len)
+                        } else {
+                            streams::read(wasi_stream, read_len)
+                        }
+                    })
                     .map_err(|_| ERRNO_IO)?;
 
                 assert_eq!(data.as_ptr(), ptr);
@@ -1087,12 +1102,21 @@ pub unsafe extern "C" fn fd_seek(
 
         // Seeking only works on files.
         if let StreamType::File(file) = &stream.type_ {
-            // It's ok to cast these indices; the WASI API will fail if
-            // the resulting values are out of range.
+            if let filesystem::DescriptorType::Directory = file.descriptor_type {
+                // This isn't really the "right" errno, but it is consistient with wasmtime's
+                // preview 1 tests.
+                return Err(ERRNO_BADF);
+            }
             let from = match whence {
-                WHENCE_SET => offset,
-                WHENCE_CUR => (file.position.get() as i64).wrapping_add(offset),
-                WHENCE_END => (filesystem::stat(file.fd)?.size as i64) + offset,
+                WHENCE_SET if offset >= 0 => offset,
+                WHENCE_CUR => match (file.position.get() as i64).checked_add(offset) {
+                    Some(pos) if pos >= 0 => pos,
+                    _ => return Err(ERRNO_INVAL),
+                },
+                WHENCE_END => match (filesystem::stat(file.fd)?.size as i64).checked_add(offset) {
+                    Some(pos) if pos >= 0 => pos,
+                    _ => return Err(ERRNO_INVAL),
+                },
                 _ => return Err(ERRNO_INVAL),
             };
             stream.input.set(None);
@@ -1162,7 +1186,17 @@ pub unsafe extern "C" fn fd_write(
             match ds.get(fd)? {
                 Descriptor::Streams(streams) => {
                     let wasi_stream = streams.get_write_stream()?;
-                    let bytes = streams::write(wasi_stream, bytes).map_err(|_| ERRNO_IO)?;
+
+                    let bytes = if let StreamType::File(file) = &streams.type_ {
+                        if file.blocking {
+                            streams::blocking_write(wasi_stream, bytes)
+                        } else {
+                            streams::write(wasi_stream, bytes)
+                        }
+                    } else {
+                        streams::write(wasi_stream, bytes)
+                    }
+                    .map_err(|_| ERRNO_IO)?;
 
                     // If this is a file, keep the current-position pointer up to date.
                     if let StreamType::File(file) = &streams.type_ {
@@ -1249,33 +1283,21 @@ pub unsafe extern "C" fn path_filestat_set_times(
     mtim: Timestamp,
     fst_flags: Fstflags,
 ) -> Errno {
-    let atim =
-        if fst_flags & (FSTFLAGS_ATIM | FSTFLAGS_ATIM_NOW) == (FSTFLAGS_ATIM | FSTFLAGS_ATIM_NOW) {
-            filesystem::NewTimestamp::Now
-        } else if fst_flags & FSTFLAGS_ATIM == FSTFLAGS_ATIM {
-            filesystem::NewTimestamp::Timestamp(filesystem::Datetime {
-                seconds: atim / 1_000_000_000,
-                nanoseconds: (atim % 1_000_000_000) as _,
-            })
-        } else {
-            filesystem::NewTimestamp::NoChange
-        };
-    let mtim =
-        if fst_flags & (FSTFLAGS_MTIM | FSTFLAGS_MTIM_NOW) == (FSTFLAGS_MTIM | FSTFLAGS_MTIM_NOW) {
-            filesystem::NewTimestamp::Now
-        } else if fst_flags & FSTFLAGS_MTIM == FSTFLAGS_MTIM {
-            filesystem::NewTimestamp::Timestamp(filesystem::Datetime {
-                seconds: mtim / 1_000_000_000,
-                nanoseconds: (mtim % 1_000_000_000) as _,
-            })
-        } else {
-            filesystem::NewTimestamp::NoChange
-        };
-
     let path = slice::from_raw_parts(path_ptr, path_len);
     let at_flags = at_flags_from_lookupflags(flags);
 
     State::with(|state| {
+        let atim = systimespec(
+            fst_flags & FSTFLAGS_ATIM == FSTFLAGS_ATIM,
+            atim,
+            fst_flags & FSTFLAGS_ATIM_NOW == FSTFLAGS_ATIM_NOW,
+        )?;
+        let mtim = systimespec(
+            fst_flags & FSTFLAGS_MTIM == FSTFLAGS_MTIM,
+            mtim,
+            fst_flags & FSTFLAGS_MTIM_NOW == FSTFLAGS_MTIM_NOW,
+        )?;
+
         let ds = state.descriptors();
         let file = ds.get_dir(fd)?;
         filesystem::set_times_at(file.fd, at_flags, path, atim, mtim)?;
@@ -1339,13 +1361,16 @@ pub unsafe extern "C" fn path_open(
         let mut ds = state.descriptors_mut();
         let file = ds.get_dir(fd)?;
         let result = filesystem::open_at(file.fd, at_flags, path, o_flags, flags, mode)?;
+        let descriptor_type = filesystem::get_type(result)?;
         let desc = Descriptor::Streams(Streams {
             input: Cell::new(None),
             output: Cell::new(None),
             type_: StreamType::File(File {
                 fd: result,
+                descriptor_type,
                 position: Cell::new(0),
                 append,
+                blocking: (fdflags & wasi::FDFLAGS_NONBLOCK) == 0,
             }),
         });
 
@@ -1388,15 +1413,14 @@ pub unsafe extern "C" fn path_readlink(
                 .with_buffer(buf, buf_len, || filesystem::readlink_at(file.fd, path))?
         };
 
-        assert_eq!(path.as_ptr(), buf);
-        assert!(path.len() <= buf_len);
-
-        *bufused = path.len();
         if use_state_buf {
             // Preview1 follows POSIX in truncating the returned path if it
             // doesn't fit.
             let len = min(path.len(), buf_len);
             ptr::copy_nonoverlapping(path.as_ptr().cast(), buf, len);
+            *bufused = len;
+        } else {
+            *bufused = path.len();
         }
 
         // The returned string's memory was allocated in `buf`, so don't separately
@@ -1561,7 +1585,6 @@ pub unsafe extern "C" fn poll_oneoff(
                 )
                 .trapping_unwrap()
     );
-
     // Store the pollable handles at the beginning, and the bool results at the
     // end, so that we don't clobber the bool results when writting the events.
     let pollables = out as *mut c_void as *mut Pollable;
@@ -1629,36 +1652,23 @@ pub unsafe extern "C" fn poll_oneoff(
                 }
 
                 EVENTTYPE_FD_READ => {
-                    match state
+                    let stream = state
                         .descriptors()
-                        .get_read_stream(subscription.u.u.fd_read.file_descriptor)
-                    {
-                        Ok(stream) => streams::subscribe_to_input_stream(stream),
-                        // If the file descriptor isn't a stream, request a
-                        // pollable which completes immediately so that it'll
-                        // immediately fail.
-                        Err(ERRNO_BADF) => monotonic_clock::subscribe(0, false),
-                        Err(e) => return Err(e),
-                    }
+                        .get_read_stream(subscription.u.u.fd_read.file_descriptor)?;
+                    streams::subscribe_to_input_stream(stream)
                 }
 
                 EVENTTYPE_FD_WRITE => {
-                    match state
+                    let stream = state
                         .descriptors()
-                        .get_write_stream(subscription.u.u.fd_write.file_descriptor)
-                    {
-                        Ok(stream) => streams::subscribe_to_output_stream(stream),
-                        // If the file descriptor isn't a stream, request a
-                        // pollable which completes immediately so that it'll
-                        // immediately fail.
-                        Err(ERRNO_BADF) => monotonic_clock::subscribe(0, false),
-                        Err(e) => return Err(e),
-                    }
+                        .get_write_stream(subscription.u.u.fd_write.file_descriptor)?;
+                    streams::subscribe_to_output_stream(stream)
                 }
 
                 _ => return Err(ERRNO_INVAL),
             });
         }
+
         let vec = state.import_alloc.with_buffer(
             results,
             nsubscriptions
@@ -1752,7 +1762,7 @@ pub unsafe extern "C" fn poll_oneoff(
                     type_ = wasi::EVENTTYPE_FD_WRITE;
                     let ds = state.descriptors();
                     let desc = ds
-                        .get(subscription.u.u.fd_read.file_descriptor)
+                        .get(subscription.u.u.fd_write.file_descriptor)
                         .trapping_unwrap();
                     match desc {
                         Descriptor::Streams(streams) => match streams.type_ {
@@ -1951,9 +1961,6 @@ fn descriptor_flags_from_flags(rights: Rights, fdflags: Fdflags) -> filesystem::
     if fdflags & wasi::FDFLAGS_RSYNC == wasi::FDFLAGS_RSYNC {
         flags |= filesystem::DescriptorFlags::REQUESTED_WRITE_SYNC;
     }
-    if fdflags & wasi::FDFLAGS_NONBLOCK == wasi::FDFLAGS_NONBLOCK {
-        flags |= filesystem::DescriptorFlags::NON_BLOCKING;
-    }
     flags
 }
 
@@ -2027,11 +2034,28 @@ pub struct File {
     /// The handle to the preview2 descriptor that this file is referencing.
     fd: filesystem::Descriptor,
 
+    /// The descriptor type, as supplied by filesystem::get_type at opening
+    descriptor_type: filesystem::DescriptorType,
+
     /// The current-position pointer.
     position: Cell<filesystem::Filesize>,
 
     /// In append mode, all writes append to the file.
     append: bool,
+
+    /// In blocking mode, read and write calls dispatch to blocking_read and
+    /// blocking_write on the underlying streams. When false, read and write
+    /// dispatch to stream's plain read and write.
+    blocking: bool,
+}
+
+impl File {
+    fn is_dir(&self) -> bool {
+        match self.descriptor_type {
+            filesystem::DescriptorType::Directory => true,
+            _ => false,
+        }
+    }
 }
 
 const PAGE_SIZE: usize = 65536;

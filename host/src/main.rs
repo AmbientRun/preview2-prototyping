@@ -57,7 +57,7 @@ fn main() -> Result<()> {
     let mut config = Config::new();
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
     config.wasm_component_model(true);
-    config.async_support(true);
+    config.async_support(false);
 
     let engine = Engine::new(&config)?;
     let component = Component::from_file(&engine, &input)?;
@@ -68,16 +68,16 @@ fn main() -> Result<()> {
 
     let mut builder = WasiCtxBuilder::new()
         .inherit_stdio()
-        .inherit_network()
+        .inherit_network(cap_std::ambient_authority())
         .args(&argv);
 
     for (guest, host) in args.map_dirs {
         let dir = cap_std::fs::Dir::open_ambient_dir(&host, cap_std::ambient_authority())
             .context(format!("opening directory {host:?}"))?;
-        builder = builder.preopened_dir(dir, &guest)?;
+        builder = builder.preopened_dir(dir, &guest);
     }
 
-    let wasi_ctx = builder.build();
+    let wasi_ctx = builder.build()?;
 
     if args.world == "command" {
         run_command(&mut linker, &engine, &component, wasi_ctx)/*.await*/?;

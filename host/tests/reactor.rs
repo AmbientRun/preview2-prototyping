@@ -6,11 +6,26 @@ use wasmtime::{
     component::{Component, Linker},
     Config, Engine, Store,
 };
-test_programs_macros::reactor_tests!();
+
+lazy_static::lazy_static! {
+    static ref ENGINE: Engine = {
+        let mut config = Config::new();
+        config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
+        config.wasm_component_model(true);
+        config.async_support(false);
+
+        let engine = Engine::new(&config).unwrap();
+        engine
+    };
+}
+
+// uses ENGINE, creates a fn get_component(&str) -> Component
+test_programs_macros::reactor_components!();
 
 wasmtime::component::bindgen!({
     path: "../test-programs/reactor-tests/wit",
     world: "test-reactor",
+    async: false,
     with: {
        "environment": host::wasi::environment,
        "streams": host::wasi::streams,
@@ -20,18 +35,9 @@ wasmtime::component::bindgen!({
     },
 });
 
-/*async*/
-fn instantiate(path: &str) -> Result<(Store<WasiCtx>, TestReactor)> {
-    println!("{}", path);
-
-    let mut config = Config::new();
-    config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
-    config.wasm_component_model(true);
-    // config.async_support(true);
-
-    let engine = Engine::new(&config)?;
-    let component = Component::from_file(&engine, &path)?;
-    let mut linker = Linker::new(&engine);
+/*async */
+fn instantiate(component: Component, wasi_ctx: WasiCtx) -> Result<(Store<WasiCtx>, TestReactor)> {
+    let mut linker = Linker::new(&ENGINE);
 
     // All of the imports available to the world are provided by the host crate:
     host::wasi::filesystem::add_to_linker(&mut linker, |x| x)?;
@@ -40,15 +46,21 @@ fn instantiate(path: &str) -> Result<(Store<WasiCtx>, TestReactor)> {
     host::wasi::preopens::add_to_linker(&mut linker, |x| x)?;
     host::wasi::exit::add_to_linker(&mut linker, |x| x)?;
 
-    let mut store = Store::new(&engine, WasiCtxBuilder::new().build());
+    let mut store = Store::new(&ENGINE, wasi_ctx);
 
-    let (wasi, _instance) =
+    let (testreactor, _instance) =
         TestReactor::instantiate/*_async*/(&mut store, &component, &linker)/*.await*/?;
-    Ok((store, wasi))
+    Ok((store, testreactor))
 }
 
-/*async*/
-fn run_reactor_tests(mut store: Store<WasiCtx>, reactor: TestReactor) -> Result<()> {
+// #[test_log::test(tokio::test)]
+#[test]
+/*async */
+fn reactor_tests() -> Result<()> {
+    let wasi = WasiCtxBuilder::new().build()?;
+
+    let (mut store, reactor) = instantiate(get_component("reactor_tests"), wasi)/*.await*/?;
+
     store
         .data_mut()
         .env
@@ -81,8 +93,11 @@ fn run_reactor_tests(mut store: Store<WasiCtx>, reactor: TestReactor) -> Result<
     // `host` crate for `streams`, not because of `with` in the bindgen macro.
     let write_dest: Arc<RwLock<Vec<u8>>> = Arc::new(RwLock::new(Vec::new()));
     let writepipe = wasi_common::pipe::WritePipe::from_shared(write_dest.clone());
-    let table_ix = store.data_mut().push_output_stream(Box::new(writepipe))?;
-    let r = reactor.call_write_strings_to(&mut store, table_ix).await?;
+    let table_ix = store
+        .data_mut()
+        .table_mut()
+        .push_output_stream(Box::new(writepipe))?;
+    let r = reactor.call_write_strings_to(&mut store, table_ix)/*.await*/?;
     assert_eq!(r, Ok(()));
 
     assert_eq!(*write_dest.read().unwrap(), b"hellogussiehello againgussie");
@@ -109,7 +124,7 @@ fn run_reactor_tests(mut store: Store<WasiCtx>, reactor: TestReactor) -> Result<
         type_: host::wasi::filesystem::DescriptorType::Unknown,
     };
     let expected = format!("{ds:?}");
-    let got = reactor.call_pass_an_imported_record(&mut store, ds).await?;
+    let got = reactor.call_pass_an_imported_record(&mut store, ds)/*.await*/?;
     assert_eq!(expected, got);
 
     Ok(())
